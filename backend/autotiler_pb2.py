@@ -13,7 +13,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18protobuf/autotiler.proto\x12\tautotiler\"\xf3\x02\n\x0c\x41utoTilerMap\x12\x0c\n\x04rows\x18\x01 \x01(\x05\x12\x0c\n\x04\x63ols\x18\x02 \x01(\x05\x12+\n\x05tiles\x18\x03 \x03(\x0b\x32\x1c.autotiler.AutoTilerMap.Tile\x1a\x94\x01\n\x04Tile\x12\x0b\n\x03row\x18\x01 \x01(\x05\x12\x0b\n\x03\x63ol\x18\x02 \x01(\x05\x12\x38\n\x0b\x62\x61seTerrain\x18\x03 \x01(\x0e\x32#.autotiler.AutoTilerMap.BaseTerrain\x12\x38\n\x0bimprovement\x18\x04 \x01(\x0e\x32#.autotiler.AutoTilerMap.Improvement\"`\n\x0b\x42\x61seTerrain\x12\n\n\x06PLAINS\x10\x00\x12\r\n\tGRASSLAND\x10\x01\x12\n\n\x06\x44\x45SERT\x10\x02\x12\n\n\x06TUNDRA\x10\x03\x12\x08\n\x04SNOW\x10\x04\x12\t\n\x05\x43OAST\x10\x05\x12\t\n\x05OCEAN\x10\x06\"!\n\x0bImprovement\x12\x08\n\x04NONE\x10\x00\x12\x08\n\x04\x43ITY\x10\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x18protobuf/autotiler.proto\x12\tautotiler\"\xc4\x04\n\x0c\x41utoTilerMap\x12\x0c\n\x04rows\x18\x01 \x01(\x05\x12\x0c\n\x04\x63ols\x18\x02 \x01(\x05\x12+\n\x05tiles\x18\x03 \x03(\x0b\x32\x1c.autotiler.AutoTilerMap.Tile\x1a\x89\x02\n\x04Tile\x12\x0b\n\x03row\x18\x01 \x01(\x05\x12\x0b\n\x03\x63ol\x18\x02 \x01(\x05\x12\x38\n\x0b\x62\x61seTerrain\x18\x03 \x01(\x0e\x32#.autotiler.AutoTilerMap.BaseTerrain\x12\x38\n\x0bimprovement\x18\x04 \x01(\x0e\x32#.autotiler.AutoTilerMap.Improvement\x12\x0c\n\x04\x66ood\x18\n \x01(\x05\x12\x12\n\nproduction\x18\x0b \x01(\x05\x12\x0c\n\x04gold\x18\x0c \x01(\x05\x12\x0f\n\x07science\x18\r \x01(\x05\x12\x0f\n\x07\x63ulture\x18\x0e \x01(\x05\x12\r\n\x05\x66\x61ith\x18\x0f \x01(\x05\x12\x12\n\nyieldValue\x18\x14 \x01(\x05\"\xbb\x01\n\x0b\x42\x61seTerrain\x12\n\n\x06PLAINS\x10\x00\x12\r\n\tGRASSLAND\x10\x01\x12\n\n\x06\x44\x45SERT\x10\x02\x12\n\n\x06TUNDRA\x10\x03\x12\x08\n\x04SNOW\x10\x04\x12\t\n\x05\x43OAST\x10\x05\x12\t\n\x05OCEAN\x10\x06\x12\x10\n\x0cPLAINS_HILLS\x10\x07\x12\x13\n\x0fGRASSLAND_HILLS\x10\x08\x12\x10\n\x0c\x44\x45SERT_HILLS\x10\t\x12\x10\n\x0cTUNDRA_HILLS\x10\n\x12\x0e\n\nSNOW_HILLS\x10\x0b\"!\n\x0bImprovement\x12\x08\n\x04NONE\x10\x00\x12\x08\n\x04\x43ITY\x10\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -21,11 +21,11 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'protobuf.autotiler_pb2', _g
 if _descriptor._USE_C_DESCRIPTORS == False:
   DESCRIPTOR._options = None
   _globals['_AUTOTILERMAP']._serialized_start=40
-  _globals['_AUTOTILERMAP']._serialized_end=411
+  _globals['_AUTOTILERMAP']._serialized_end=620
   _globals['_AUTOTILERMAP_TILE']._serialized_start=130
-  _globals['_AUTOTILERMAP_TILE']._serialized_end=278
-  _globals['_AUTOTILERMAP_BASETERRAIN']._serialized_start=280
-  _globals['_AUTOTILERMAP_BASETERRAIN']._serialized_end=376
-  _globals['_AUTOTILERMAP_IMPROVEMENT']._serialized_start=378
-  _globals['_AUTOTILERMAP_IMPROVEMENT']._serialized_end=411
+  _globals['_AUTOTILERMAP_TILE']._serialized_end=395
+  _globals['_AUTOTILERMAP_BASETERRAIN']._serialized_start=398
+  _globals['_AUTOTILERMAP_BASETERRAIN']._serialized_end=585
+  _globals['_AUTOTILERMAP_IMPROVEMENT']._serialized_start=587
+  _globals['_AUTOTILERMAP_IMPROVEMENT']._serialized_end=620
 # @@protoc_insertion_point(module_scope)

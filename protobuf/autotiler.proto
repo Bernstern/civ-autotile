@@ -9,8 +9,15 @@ message AutoTilerMap {
         DESERT = 2;
         TUNDRA = 3;
         SNOW = 4;
+
         COAST = 5;
         OCEAN = 6;
+
+        PLAINS_HILLS = 7;
+        GRASSLAND_HILLS = 8;
+        DESERT_HILLS = 9;
+        TUNDRA_HILLS = 10;
+        SNOW_HILLS = 11;
     }
 
     enum Improvement {
@@ -24,6 +31,15 @@ message AutoTilerMap {
 
         BaseTerrain baseTerrain = 3;
         Improvement improvement = 4;
+
+        int32 food = 10;
+        int32 production = 11;
+        int32 gold = 12;
+        int32 science = 13;
+        int32 culture = 14;
+        int32 faith = 15;
+
+        int32 yieldValue = 20;
     }
 
     int32 rows = 1;

@@ -33,6 +33,36 @@ def getDistanceBetweenTiles(tile1: autotiler_pb2.AutoTilerMap.Tile, tile2: autot
     b = oddr_to_axial(tile2)
     return (abs(a[0] - b[0]) + abs(a[0] + a[1] - b[0] - b[1]) + abs(a[1] - b[1])) / 2
 
+
+class YieldsCalculator:
+    BaseTerrain = {
+        "plains" : (1,1),
+        "grassland" : (2,0),
+        "desert" : (0,0),
+        "tundra" : (1,0),
+        "snow" : (0,0),
+        "coast" : (1,0),
+        "ocean" : (1,0),
+        "plains_hills" : (1,2),
+        "grassland_hills" : (2,1),
+        "desert_hills" : (0,1),
+        "tundra_hills" : (1,1),
+        "snow_hills" : (0,1),
+    }
+
+    @classmethod
+    def calculate_yields(cls, tile: autotiler_pb2.AutoTilerMap.Tile):
+        terrain = autotiler_pb2.AutoTilerMap.BaseTerrain.Name(tile.baseTerrain).lower()
+        base_yield = cls.BaseTerrain[terrain]
+
+        return base_yield
+    
+    @classmethod
+    def calculate_tile_value(cls, tile: autotiler_pb2.AutoTilerMap.Tile):
+        food, production = cls.calculate_yields(tile)
+        return food + production
+
+
 @app.route("/", methods=['POST']) 
 def home():
     start_time = time.time()
@@ -44,16 +74,25 @@ def home():
     map = autotiler_pb2.AutoTilerMap()
     map.ParseFromString(payload)
 
+    # First go through each tile and update the yields
+    yields = []
+    for i in range(map.rows * map.cols):
+        yield_value = YieldsCalculator.calculate_tile_value(map.tiles[i])
+        yields.append(yield_value)
+        map.tiles[i].yieldValue = yield_value
+        map.tiles[i].food, map.tiles[i].production = YieldsCalculator.calculate_yields(map.tiles[i])
+    lower_yield, upper_yield = min(yields), max(yields)
+    print(f"Yields: {lower_yield} - {upper_yield}")
+
     model = cp_model.CpModel()
 
     # Variables
-    cities = [model.NewIntVar(0, 1, 'city_%i' % i) for i in range(map.rows * map.cols)]
-
+    cities = [model.NewBoolVar('city_%i' % i) for i in range(map.rows * map.cols)]
+    city_yield = [model.NewIntVar(lower_yield, upper_yield, f'city_yield_{i}') for i in range(map.rows * map.cols)]
 
     # Constraints: No cities on invalid tiles
     for i in range(map.rows * map.cols):
         if map.tiles[i].baseTerrain in INVALID_BASE_TERRAIN:
-            # print(f"Blocking tile {i} from having a city [base terrain {map.tiles[i].baseTerrain}]]")
             model.Add(cities[i] == 0)
 
     # Constraints: No cities within 3 tiles of each other
@@ -62,22 +101,32 @@ def home():
             if 1 <= getDistanceBetweenTiles(map.tiles[i], map.tiles[j]) <= 3:
                 model.Add(cities[i] + cities[j] <= 1)
 
+    # Objective: maximize total yield
+    total_yield = model.NewIntVar(lower_yield, upper_yield * len(cities), 'total_yield')
+    for i in range(map.rows * map.cols):
+        model.Add(city_yield[i] == cities[i] * map.tiles[i].yieldValue)
+    model.Add(total_yield == sum(city_yield))
+
     # Objective: Maximize number of cities
-    model.Maximize(sum(cities))
+    model.Maximize(total_yield)
 
     # Solve
     solver = cp_model.CpSolver()
     status = solver.Solve(model)
 
+    # Print result
+    optimized_min_yield = solver.ObjectiveValue()
+
     if status == cp_model.OPTIMAL:
-        print('Optimal solution found!')
+        print(f'Optimal solution found w/ {optimized_min_yield} total yield.')
     else:
         print('No optimal solution found.')
 
-    # Print out the solution.
-    print(f"Able to build {solver.ObjectiveValue()} cities")
+    cities_placed = [i for i in range(map.rows*map.cols) if solver.Value(cities[i]) == 1]
+    print(cities_placed)
 
     # Go through the map and add city improvement
+    print(f"Added {sum(solver.Value(cities[i]) for i in range(map.rows * map.cols))} cities")
     for i in range(map.rows * map.cols):
         if solver.Value(cities[i]) == 1:
             map.tiles[i].improvement = autotiler_pb2.AutoTilerMap.Improvement.CITY
