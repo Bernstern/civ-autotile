@@ -28,6 +28,7 @@ def oddr_to_axial(tile):
     return q, r
 
 def getDistanceBetweenTiles(tile1: autotiler_pb2.AutoTilerMap.Tile, tile2: autotiler_pb2.AutoTilerMap.Tile):
+    # https://www.redblobgames.com/grids/hexagons/#distances-axial
     a = oddr_to_axial(tile1)
     b = oddr_to_axial(tile2)
     return (abs(a[0] - b[0]) + abs(a[0] + a[1] - b[0] - b[1]) + abs(a[1] - b[1])) / 2
