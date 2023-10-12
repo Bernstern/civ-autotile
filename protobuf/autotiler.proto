@@ -18,6 +18,8 @@ message AutoTilerMap {
         DESERT_HILLS = 9;
         TUNDRA_HILLS = 10;
         SNOW_HILLS = 11;
+
+        MOUNTAINS = 12;
     }
 
     enum Improvement {

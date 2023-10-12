@@ -49,6 +49,7 @@ class YieldsCalculator:
         "desert_hills" : (0,1),
         "tundra_hills" : (1,1),
         "snow_hills" : (0,1),
+        "mountains" : (0,0),
     }
 
     @classmethod
@@ -58,25 +59,29 @@ class YieldsCalculator:
 
         return base_yield
     
-    @classmethod
-    def calculate_tile_value(cls, tile: autotiler_pb2.AutoTilerMap.Tile):
-        food, production = cls.calculate_yields(tile)
-        return food + production
-    
 class AutoTiler():
     class Strategies(Enum):
         MAX_CITIES = 1
         MAX_YIELD = 2
+        MAX_FOOD = 3
+        MAX_PRODUCTION = 4
 
     def __init__(self, map):
         self.map = map
         self.num_tiles = map.rows * map.cols
 
-    def calculate_yields(self):
+    def calculate_yields(self, strategy: Strategies = Strategies.MAX_YIELD):
         yields = []
 
         for i in range(self.num_tiles):
-            yield_value = YieldsCalculator.calculate_tile_value(self.map.tiles[i])
+            if strategy == AutoTiler.Strategies.MAX_FOOD:
+                yield_value = YieldsCalculator.calculate_yields(self.map.tiles[i])[0]
+            elif strategy == AutoTiler.Strategies.MAX_PRODUCTION:
+                yield_value = YieldsCalculator.calculate_yields(self.map.tiles[i])[1]
+            # Default to max yield
+            else:
+                yield_value = sum(YieldsCalculator.calculate_yields(self.map.tiles[i]))
+
             yields.append(yield_value)
             self.map.tiles[i].food, self.map.tiles[i].production = YieldsCalculator.calculate_yields(self.map.tiles[i])
 
@@ -88,7 +93,7 @@ class AutoTiler():
 
     def optimize(self, strategy: Strategies):
         # First go through each tile and update the yields
-        self.calculate_yields()
+        self.calculate_yields(strategy)
 
         # Setup the model
         model = cp_model.CpModel()
@@ -108,14 +113,18 @@ class AutoTiler():
                 if 1 <= getDistanceBetweenTiles(self.map.tiles[i], self.map.tiles[j]) <= 3:
                     model.Add(cities[i] + cities[j] <= 1)
 
-        # Objective: maximize total yield
-        total_yield = model.NewIntVar(self.lower_yield, self.upper_yield * len(cities), 'total_yield')
-        for i in range(self.num_tiles):
-            model.Add(city_yield[i] == cities[i] * self.map.tiles[i].yieldValue)
-        model.Add(total_yield == sum(city_yield))
 
         # Objective: Maximize number of cities
-        model.Maximize(total_yield)
+        if strategy == AutoTiler.Strategies.MAX_YIELD:
+            model.Maximize(sum(cities))
+        else:
+            # Objective: maximize total value
+            total_yield = model.NewIntVar(self.lower_yield, self.upper_yield * len(cities), 'total_yield')
+            for i in range(self.num_tiles):
+                model.Add(city_yield[i] == cities[i] * self.map.tiles[i].yieldValue)
+            model.Add(total_yield == sum(city_yield))
+
+            model.Maximize(total_yield)
 
         # Solve
         solver = cp_model.CpSolver()
@@ -125,12 +134,9 @@ class AutoTiler():
         optimized_min_yield = solver.ObjectiveValue()
 
         if status == cp_model.OPTIMAL:
-            print(f'Optimal solution found w/ {optimized_min_yield} total yield.')
+            print(f'Optimal solution found w/ {optimized_min_yield} total value.')
         else:
             print('No optimal solution found.')
-
-        cities_placed = [i for i in range(self.num_tiles) if solver.Value(cities[i]) == 1]
-        print(cities_placed)
 
         # Go through the map and add city improvement
         print(f"Added {sum(solver.Value(cities[i]) for i in range(self.num_tiles))} cities")
@@ -151,7 +157,7 @@ def home():
     map.ParseFromString(payload)
 
     optimizer = AutoTiler(map)
-    optimizer.optimize(AutoTiler.Strategies.MAX_YIELD)
+    optimizer.optimize(AutoTiler.Strategies.MAX_CITIES)
 
     # Serialize the map and return it
     print(f"Total time: {time.time() - start_time:.2f}s")
