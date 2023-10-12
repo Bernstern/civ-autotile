@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package autotiler;
+
+message AutoTilerMap {
+    enum BaseTerrain {
+        PLAINS = 0;
+        GRASSLAND = 1;
+        DESERT = 2;
+        TUNDRA = 3;
+        SNOW = 4;
+        COAST = 5;
+        OCEAN = 6;
+    }
+
+    enum Improvement {
+        NONE = 0;
+        CITY = 1;
+    }
+
+    message Tile {
+        int32 row = 1;
+        int32 col = 2;
+
+        BaseTerrain baseTerrain = 3;
+        Improvement improvement = 4;
+    }
+
+    int32 rows = 1;
+    int32 cols = 2;
+    repeated Tile tiles = 3;
+}
