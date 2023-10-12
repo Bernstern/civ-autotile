@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from enum import Enum
 import json
 import time
 from flask import Flask, request
@@ -61,6 +62,81 @@ class YieldsCalculator:
     def calculate_tile_value(cls, tile: autotiler_pb2.AutoTilerMap.Tile):
         food, production = cls.calculate_yields(tile)
         return food + production
+    
+class AutoTiler():
+    class Strategies(Enum):
+        MAX_CITIES = 1
+        MAX_YIELD = 2
+
+    def __init__(self, map):
+        self.map = map
+        self.num_tiles = map.rows * map.cols
+
+    def calculate_yields(self):
+        yields = []
+
+        for i in range(self.num_tiles):
+            yield_value = YieldsCalculator.calculate_tile_value(self.map.tiles[i])
+            yields.append(yield_value)
+            self.map.tiles[i].food, self.map.tiles[i].production = YieldsCalculator.calculate_yields(self.map.tiles[i])
+
+            # TODO: Add weight to yields
+            self.map.tiles[i].yieldValue = yield_value
+
+        self.lower_yield, self.upper_yield = min(yields), max(yields)
+        print(f"Yields: {self.lower_yield} - {self.upper_yield}")
+
+    def optimize(self, strategy: Strategies):
+        # First go through each tile and update the yields
+        self.calculate_yields()
+
+        # Setup the model
+        model = cp_model.CpModel()
+
+        # Variables
+        cities = [model.NewBoolVar('city_%i' % i) for i in range(self.num_tiles)]
+        city_yield = [model.NewIntVar(self.lower_yield, self.upper_yield, f'city_yield_{i}') for i in range(self.num_tiles)]
+
+        # Constraint: No cities on invalid tiles
+        for i in range(self.num_tiles):
+            if self.map.tiles[i].baseTerrain in INVALID_BASE_TERRAIN:
+                model.Add(cities[i] == 0)
+
+        # Constraint: No cities within 3 tiles of each other
+        for i in range(self.num_tiles):
+            for j in range(self.num_tiles):
+                if 1 <= getDistanceBetweenTiles(self.map.tiles[i], self.map.tiles[j]) <= 3:
+                    model.Add(cities[i] + cities[j] <= 1)
+
+        # Objective: maximize total yield
+        total_yield = model.NewIntVar(self.lower_yield, self.upper_yield * len(cities), 'total_yield')
+        for i in range(self.num_tiles):
+            model.Add(city_yield[i] == cities[i] * self.map.tiles[i].yieldValue)
+        model.Add(total_yield == sum(city_yield))
+
+        # Objective: Maximize number of cities
+        model.Maximize(total_yield)
+
+        # Solve
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+
+        # Print result
+        optimized_min_yield = solver.ObjectiveValue()
+
+        if status == cp_model.OPTIMAL:
+            print(f'Optimal solution found w/ {optimized_min_yield} total yield.')
+        else:
+            print('No optimal solution found.')
+
+        cities_placed = [i for i in range(self.num_tiles) if solver.Value(cities[i]) == 1]
+        print(cities_placed)
+
+        # Go through the map and add city improvement
+        print(f"Added {sum(solver.Value(cities[i]) for i in range(self.num_tiles))} cities")
+        for i in range(self.num_tiles):
+            if solver.Value(cities[i]) == 1:
+                self.map.tiles[i].improvement = autotiler_pb2.AutoTilerMap.Improvement.CITY
 
 
 @app.route("/", methods=['POST']) 
@@ -74,62 +150,8 @@ def home():
     map = autotiler_pb2.AutoTilerMap()
     map.ParseFromString(payload)
 
-    # First go through each tile and update the yields
-    yields = []
-    for i in range(map.rows * map.cols):
-        yield_value = YieldsCalculator.calculate_tile_value(map.tiles[i])
-        yields.append(yield_value)
-        map.tiles[i].yieldValue = yield_value
-        map.tiles[i].food, map.tiles[i].production = YieldsCalculator.calculate_yields(map.tiles[i])
-    lower_yield, upper_yield = min(yields), max(yields)
-    print(f"Yields: {lower_yield} - {upper_yield}")
-
-    model = cp_model.CpModel()
-
-    # Variables
-    cities = [model.NewBoolVar('city_%i' % i) for i in range(map.rows * map.cols)]
-    city_yield = [model.NewIntVar(lower_yield, upper_yield, f'city_yield_{i}') for i in range(map.rows * map.cols)]
-
-    # Constraints: No cities on invalid tiles
-    for i in range(map.rows * map.cols):
-        if map.tiles[i].baseTerrain in INVALID_BASE_TERRAIN:
-            model.Add(cities[i] == 0)
-
-    # Constraints: No cities within 3 tiles of each other
-    for i in range(map.rows * map.cols):
-        for j in range(map.rows * map.cols):
-            if 1 <= getDistanceBetweenTiles(map.tiles[i], map.tiles[j]) <= 3:
-                model.Add(cities[i] + cities[j] <= 1)
-
-    # Objective: maximize total yield
-    total_yield = model.NewIntVar(lower_yield, upper_yield * len(cities), 'total_yield')
-    for i in range(map.rows * map.cols):
-        model.Add(city_yield[i] == cities[i] * map.tiles[i].yieldValue)
-    model.Add(total_yield == sum(city_yield))
-
-    # Objective: Maximize number of cities
-    model.Maximize(total_yield)
-
-    # Solve
-    solver = cp_model.CpSolver()
-    status = solver.Solve(model)
-
-    # Print result
-    optimized_min_yield = solver.ObjectiveValue()
-
-    if status == cp_model.OPTIMAL:
-        print(f'Optimal solution found w/ {optimized_min_yield} total yield.')
-    else:
-        print('No optimal solution found.')
-
-    cities_placed = [i for i in range(map.rows*map.cols) if solver.Value(cities[i]) == 1]
-    print(cities_placed)
-
-    # Go through the map and add city improvement
-    print(f"Added {sum(solver.Value(cities[i]) for i in range(map.rows * map.cols))} cities")
-    for i in range(map.rows * map.cols):
-        if solver.Value(cities[i]) == 1:
-            map.tiles[i].improvement = autotiler_pb2.AutoTilerMap.Improvement.CITY
+    optimizer = AutoTiler(map)
+    optimizer.optimize(AutoTiler.Strategies.MAX_YIELD)
 
     # Serialize the map and return it
     print(f"Total time: {time.time() - start_time:.2f}s")
