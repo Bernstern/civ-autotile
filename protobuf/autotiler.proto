@@ -20,6 +20,20 @@ message AutoTilerMap {
         SNOW_HILLS = 11;
 
         MOUNTAINS = 12;
+
+        GRASSLAND_FLOODPLAINS = 13;
+        DESERT_FLOODPLAINS = 14;
+        PLAINS_FLOODPLAINS = 15;
+    }
+
+    enum Feature {
+        EMPTY = 0;
+        WOODS = 1;
+        RAINFOREST = 2;
+        MARSH = 3;
+        OASIS = 4;
+        GEOTHERMAL_FISSURE = 5;
+        VOLCANIC_SOIL = 6;
     }
 
     enum Improvement {
@@ -33,6 +47,7 @@ message AutoTilerMap {
 
         BaseTerrain baseTerrain = 3;
         Improvement improvement = 4;
+        Feature feature = 5;
 
         int32 food = 10;
         int32 production = 11;
