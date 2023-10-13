@@ -70,6 +70,62 @@ class YieldsCalculator:
         "volcanic_soil": (0, 0),
     }
 
+    Resources = {
+        "clear": (0, 0),
+        "bananas": (1, 0),
+        "copper": (0, 0),
+        "cattle": (1, 0),
+        "crabs": (0, 0),
+        "deer": (0, 1),
+        "fish": (1, 0),
+        "maize": (0, 0),
+        "rice": (1, 0),
+        "sheep": (0, 1),
+        "stone": (0, 1),
+        "wheat": (1, 0),
+        "amber": (0, 0),
+        "cinnamon": (0, 0),
+        "citrus": (2, 0),
+        "cloves": (0, 0),
+        "cocoa": (0, 0),
+        "coffee": (0, 0),
+        "cosmetics": (0, 0),
+        "cotton": (0, 0),
+        "dyes": (0, 0),
+        "diamonds": (0, 0),
+        "furs": (1, 0),
+        "gypsum": (0, 1),
+        "honey": (2, 0),
+        "incense": (0, 0),
+        "ivory": (0, 1),
+        "jade": (0, 0),
+        "jeans": (0, 0),
+        "marble": (0, 0),
+        "mercury": (0, 0),
+        "olives": (0, 1),
+        "pearls": (0, 0),
+        "perfume": (0, 0),
+        "salt": (1, 0),
+        "silk": (0, 0),
+        "silver": (0, 0),
+        "spices": (2, 0),
+        "sugar": (2, 0),
+        "tea": (0, 0),
+        "tobacco": (0, 0),
+        "toys": (0, 0),
+        "truffles": (0, 0),
+        "turtles": (0, 0),
+        "whales": (0, 1),
+        "wine": (1, 0),
+        "horses": (1, 1),
+        "iron": (0, 0),
+        "niter": (1, 1),
+        "coal": (0, 2),
+        "oil": (0, 3),
+        "aluminum": (0, 0),
+        "uranium": (0, 2),
+    }
+
     @classmethod
     def calculate_yields(cls, tile: autotiler_pb2.AutoTilerMap.Tile):
         terrain = autotiler_pb2.AutoTilerMap.BaseTerrain.Name(tile.baseTerrain).lower()
@@ -78,7 +134,20 @@ class YieldsCalculator:
         feature = autotiler_pb2.AutoTilerMap.Feature.Name(tile.feature).lower()
         feature_yield = cls.Features[feature]
 
-        return tuple(map(lambda i, j: i + j, base_yield, feature_yield))
+        if hasattr(tile, "resource"):
+            resource = autotiler_pb2.AutoTilerMap.Resource.Name(tile.resource).lower()
+            print(resource)
+            resource_yield = cls.Resources[resource]
+            print(resource_yield)
+            resource_yield = (0, 0)
+        else:
+            resource_yield = (0, 0)
+
+        # Sum the yields in the tuple
+        food = sum([base_yield[0], feature_yield[0], resource_yield[0]])
+        production = sum([base_yield[1], feature_yield[1], resource_yield[1]])
+
+        return (food, production)
 
 
 class AutoTiler:

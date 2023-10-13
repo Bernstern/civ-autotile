@@ -160,4 +160,5 @@ cython_debug/
 #.idea/
 
 # Protobuf
-*.pb2.py
+*pb2.py
+autotiler/lib/gen

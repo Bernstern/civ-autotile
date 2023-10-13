@@ -41,6 +41,64 @@ message AutoTilerMap {
         CITY = 1;
     }
 
+    enum Resource {
+        CLEAR = 0;
+        BANANAS = 12;
+        COPPER = 1;
+        CATTLE = 2;
+        CRABS = 3;
+        DEER = 4;
+        FISH = 5;
+        MAIZE = 6;
+        RICE = 7;
+        SHEEP = 8;
+        STONE = 9;
+        WHEAT = 10;
+
+        AMBER = 11;
+        // CINNAMON = 12; Doesn't spawn
+        CITRUS = 13;
+        // CLOVES = 14; Doesn't spawn
+        COCOA = 15;
+        COFFEE = 16;
+        // COSMETICS = 17; Great merchant
+        COTTON = 18;
+        DYES = 19;
+        DIAMONDS = 20;
+        FURS = 21;
+        GYPSUM = 22;
+        HONEY = 23;
+        INCENSE = 24;
+        IVORY = 25;
+        JADE = 26;
+        // JEANS = 27; Great merchant
+        MARBLE = 28;
+        MERCURY = 29;
+        OLIVES = 30;
+        PEARLS = 31;
+        // PERFUME = 32; Great merchant
+        SALT = 33;
+        SILK = 34;
+        SILVER = 35;
+        SPICES = 36;
+        SUGAR = 37;
+        TEA = 38;
+        TOBACCO = 39;
+        // TOYS = 40; Great merchant
+        TRUFFLES = 41;
+        TURTLES = 42;
+        WHALES = 43;
+        WINE = 44;
+
+        HORSES = 45;
+        IRON = 46;
+        NITER = 47;
+        COAL = 48;
+        OIL = 49;
+        ALUMINUM = 50;
+        URANIUM = 51;
+    }
+
     message Tile {
         int32 row = 1;
         int32 col = 2;
@@ -48,6 +106,7 @@ message AutoTilerMap {
         BaseTerrain baseTerrain = 3;
         Improvement improvement = 4;
         Feature feature = 5;
+        Resource resource = 6;
 
         int32 food = 10;
         int32 production = 11;
