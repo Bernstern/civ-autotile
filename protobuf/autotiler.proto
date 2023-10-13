@@ -39,6 +39,8 @@ message AutoTilerMap {
     enum Improvement {
         NONE = 0;
         CITY = 1;
+
+        CAMPUS = 2;
     }
 
     enum Resource {

@@ -19,6 +19,8 @@ INVALID_BASE_TERRAIN = {
     autotiler_pb2.AutoTilerMap.BaseTerrain.OCEAN,
 }
 
+MIN_DISTANCE_BETWEEN_CITIES = 3
+
 
 def getTerrainNameFromNumber(val: int):
     return autotiler_pb2.AutoTilerMap.BaseTerrain.Name(val)
@@ -29,6 +31,36 @@ def oddr_to_axial(tile):
     q = tile.col - (tile.row - (tile.row & 1)) / 2
     r = tile.row
     return q, r
+
+
+def oddr_to_cube(tile):
+    # https://www.redblobgames.com/grids/hexagons/#conversions-offset
+    x = tile.col - (tile.row - (tile.row & 1)) / 2
+    z = tile.row
+    y = -x - z
+    return x, y, z
+
+
+def cube_subtract(a, b):
+    # https://www.redblobgames.com/grids/hexagons/#distances-cube
+    return a[0] - b[0], a[1] - b[1], a[2] - b[2]
+
+
+def cube_add(a, b):
+    return a[0] + b[0], a[1] + b[1], a[2] + b[2]
+
+
+def cube_direction(direction: int):
+    dirs = [(1, 0, -1), (1, -1, 0), (0, -1, 1), (-1, 0, 1), (-1, +1, 0), (0, 1, -1)]
+    return dirs[direction]
+
+
+def cube_neighbor(cube_coord, direction: int):
+    return cube_add(cube_coord, cube_direction(direction))
+
+
+def cube_scale(cube_coords, scale):
+    return tuple(c * scale for c in cube_coords)
 
 
 def getDistanceBetweenTiles(
@@ -136,10 +168,7 @@ class YieldsCalculator:
 
         if hasattr(tile, "resource"):
             resource = autotiler_pb2.AutoTilerMap.Resource.Name(tile.resource).lower()
-            print(resource)
             resource_yield = cls.Resources[resource]
-            print(resource_yield)
-            resource_yield = (0, 0)
         else:
             resource_yield = (0, 0)
 
@@ -160,6 +189,36 @@ class AutoTiler:
     def __init__(self, map):
         self.map = map
         self.num_tiles = map.rows * map.cols
+
+        # First go through and prefetch each tile and store it's cube coordinates mapping to its id
+        self.cube_to_id = {}
+        for i in range(self.num_tiles):
+            self.cube_to_id[oddr_to_cube(self.map.tiles[i])] = i
+
+    def fetch_ring(self, tile, radius):
+        # First get the cube coordinates of the tile
+        center = oddr_to_cube(tile)
+
+        if radius == 0:
+            return [center]
+
+        results = []
+
+        hex = cube_add(center, cube_scale(cube_direction(4), radius))
+        for i in range(6):
+            for j in range(radius):
+                results.append(hex)
+                hex = cube_neighbor(hex, i)
+
+        return results
+
+    def fetch_cumulative_ring(self, tile, radius: int):
+        # DOESNT INCLUDE THE CENTER
+        # https://www.redblobgames.com/grids/hexagons/#rings-spiral
+        results = []
+        for i in range(1, radius + 1):
+            results += self.fetch_ring(tile, i)
+        return results
 
     def calculate_yields(self, strategy: Strategies = Strategies.MAX_YIELD):
         yields = []
@@ -185,7 +244,7 @@ class AutoTiler:
         self.lower_yield, self.upper_yield = min(yields), max(yields)
         print(f"Yields: {self.lower_yield} - {self.upper_yield}")
 
-    def optimize(self, strategy: Strategies):
+    def optimize_cities(self, strategy: Strategies):
         # First go through each tile and update the yields
         self.calculate_yields(strategy)
 
@@ -205,14 +264,16 @@ class AutoTiler:
                 model.Add(cities[i] == 0)
 
         # Constraint: No cities within 3 tiles of each other
+        #   be careful here to not restrict a tile against itself, almost got caught on that with cumulative ring generation
         for i in range(self.num_tiles):
-            for j in range(self.num_tiles):
-                if (
-                    1
-                    <= getDistanceBetweenTiles(self.map.tiles[i], self.map.tiles[j])
-                    <= 3
-                ):
-                    model.Add(cities[i] + cities[j] <= 1)
+            ring = self.fetch_cumulative_ring(
+                self.map.tiles[i], radius=MIN_DISTANCE_BETWEEN_CITIES
+            )
+            for coord in ring:
+                tile_id = self.cube_to_id.get(coord, None)
+                if tile_id is None:
+                    continue  # This means that the tile is off our map
+                model.Add(cities[i] + cities[tile_id] <= 1)
 
         # Objective: Maximize number of cities
         if strategy == AutoTiler.Strategies.MAX_YIELD:
@@ -250,6 +311,9 @@ class AutoTiler:
                     i
                 ].improvement = autotiler_pb2.AutoTilerMap.Improvement.CITY
 
+    def optimize_campuses(self):
+        pass
+
 
 @app.route("/", methods=["POST"])
 def home():
@@ -263,7 +327,8 @@ def home():
     map.ParseFromString(payload)
 
     optimizer = AutoTiler(map)
-    optimizer.optimize(AutoTiler.Strategies.MAX_CITIES)
+    optimizer.optimize_cities(AutoTiler.Strategies.MAX_CITIES)
+    optimizer.optimize_campuses()
 
     # Serialize the map and return it
     print(f"Total time: {time.time() - start_time:.2f}s")
