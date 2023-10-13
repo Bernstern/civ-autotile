@@ -9,3 +9,5 @@ check out switching to grpc
 need to handle cities on different land masses (2 tile barrier)
 
 add constraints for tile features + resources
+
+add reefs

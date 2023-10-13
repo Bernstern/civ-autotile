@@ -34,6 +34,7 @@ message AutoTilerMap {
         OASIS = 4;
         GEOTHERMAL_FISSURE = 5;
         VOLCANIC_SOIL = 6;
+        REEF = 7;
     }
 
     enum Improvement {

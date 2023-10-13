@@ -17,6 +17,7 @@ cors = CORS(app)
 INVALID_BASE_TERRAIN = {
     autotiler_pb2.AutoTilerMap.BaseTerrain.COAST,
     autotiler_pb2.AutoTilerMap.BaseTerrain.OCEAN,
+    autotiler_pb2.AutoTilerMap.BaseTerrain.MOUNTAINS,
 }
 
 MIN_DISTANCE_BETWEEN_CITIES = 3
@@ -100,6 +101,7 @@ class YieldsCalculator:
         "oasis": (3, 0),
         "geothermal_fissure": (0, 0),
         "volcanic_soil": (0, 0),
+        "reef": (1, 1),
     }
 
     Resources = {
@@ -220,6 +222,41 @@ class AutoTiler:
             results += self.fetch_ring(tile, i)
         return results
 
+    def calculate_campus_adjacency(self, neighbors):
+        # Go through each neighbor and add on adjacency bonuses
+        adjacency = 0
+
+        for coord in neighbors:
+            tile_id = self.cube_to_id.get(coord, None)
+
+            if tile_id is None:
+                continue
+
+            neighbor = self.map.tiles[tile_id]
+
+            # +2 science from Great Barrier Reef or Pamukkale TODO
+
+            # +2 science from geothermal fissure + reef
+            if neighbor.feature in [
+                autotiler_pb2.AutoTilerMap.Feature.GEOTHERMAL_FISSURE,
+                autotiler_pb2.AutoTilerMap.Feature.REEF,
+            ]:
+                adjacency += 2
+
+            # +1 science for a mountain
+            if neighbor.baseTerrain == autotiler_pb2.AutoTilerMap.BaseTerrain.MOUNTAINS:
+                adjacency += 1
+
+            # +0.5 science for each adjacent district/improvement
+            if neighbor.improvement != autotiler_pb2.AutoTilerMap.Improvement.NONE:
+                adjacency += 0.5
+
+            # +0.5 for each adjacent rainforest
+            if neighbor.feature == autotiler_pb2.AutoTilerMap.Feature.RAINFOREST:
+                adjacency += 0.5
+
+        return adjacency
+
     def calculate_yields(self, strategy: Strategies = Strategies.MAX_YIELD):
         yields = []
 
@@ -312,7 +349,66 @@ class AutoTiler:
                 ].improvement = autotiler_pb2.AutoTilerMap.Improvement.CITY
 
     def optimize_campuses(self):
-        pass
+        # Setup the model
+        model = cp_model.CpModel()
+
+        # Go through and calculate initial adjacency for each tile
+        base_adjacency = []
+        for i in range(self.num_tiles):
+            neighbors = self.fetch_ring(self.map.tiles[i], radius=1)
+            base_adjacency.append(self.calculate_campus_adjacency(neighbors))
+
+        # For our purposes we can take the floor of the adjacency so that the solver can work with ints
+        base_adjacency = [int(adj) for adj in base_adjacency]
+
+        # Max tile science is the best base adjacency + 6 surrounding campuses
+        max_tile_science = max(base_adjacency) + 3
+
+        # Variables
+        campus = [model.NewBoolVar("campus_%i" % i) for i in range(self.num_tiles)]
+        campus_adj = [
+            model.NewIntVar(0, max_tile_science, f"campus_adj_{i}")
+            for i in range(self.num_tiles)
+        ]
+
+        # Constraint: No campuses on invalid tiles or on cities
+        for i in range(self.num_tiles):
+            if (
+                self.map.tiles[i].baseTerrain in INVALID_BASE_TERRAIN
+                or self.map.tiles[i].improvement
+                == autotiler_pb2.AutoTilerMap.Improvement.CITY
+            ):
+                model.Add(campus[i] == 0)
+
+        # Constraint: For now lets say total campus count is one
+        model.Add(sum(campus) == 10)
+
+        # Objective: Maximize total science from base adj + other campuses
+        total_science = model.NewIntVar(
+            0, max(base_adjacency) * self.num_tiles, "total_science"
+        )
+        for i in range(self.num_tiles):
+            model.Add(campus_adj[i] == campus[i] * base_adjacency[i])
+
+        model.Add(total_science == sum(campus_adj))
+        model.Maximize(total_science)
+
+        # Solve
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+
+        if status == cp_model.OPTIMAL:
+            print(f"Optimal solution found w/ {solver.ObjectiveValue()} total science.")
+
+        # Go through and log each added campus and it's adjacency
+        for i in range(self.num_tiles):
+            if solver.Value(campus[i]) == 1:
+                print(f"Campus at {self.map.tiles[i].row}, {self.map.tiles[i].col}")
+                print(f"Adjacency: {solver.Value(campus_adj[i]) }")
+                self.map.tiles[
+                    i
+                ].improvement = autotiler_pb2.AutoTilerMap.Improvement.CAMPUS
+                self.map.tiles[i].science = solver.Value(campus_adj[i])
 
 
 @app.route("/", methods=["POST"])
