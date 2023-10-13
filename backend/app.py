@@ -482,7 +482,7 @@ class AutoTiler:
             model.Add(tile_count[city_idx] == sum(bools))
 
         min_tile_count = model.NewIntVar(0, num_tiles, "min_tile_count")
-        model.AddMinEquality(min_tile_count, tile_count)
+        model.AddMaxEquality(min_tile_count, tile_count)
         model.Maximize(min_tile_count)
 
         # Identity + Range constraint: Tiles must be within 3 tiles of their owner and cities own themselves
@@ -492,7 +492,8 @@ class AutoTiler:
                     model.Add(helper_bools[i][j] == 1)
                 else:
                     distance = cube_distance(self.map.tiles[i], self.map.tiles[j])
-                    if distance > 3:
+                    print(distance)
+                    if distance > 1:
                         model.Add(helper_bools[i][j] == 0)
                     else:
                         model.Add(helper_bools[i][j] <= 1)
