@@ -7,6 +7,8 @@ import 'dart:convert';
 
 import 'package:autotiler/gen/protobuf/autotiler.pb.dart';
 
+import 'tile.dart';
+
 typedef CivMap = Map<Record, Tile>;
 
 void main() {
@@ -52,96 +54,6 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class Tile {
-  late AutoTilerMap_Tile _tile;
-  late Color _color;
-
-  Tile(int col, int row, AutoTilerMap_BaseTerrain terrain,
-      AutoTilerMap_Feature feature) {
-    _tile = AutoTilerMap_Tile(
-        row: row,
-        col: col,
-        baseTerrain: terrain,
-        improvement: AutoTilerMap_Improvement.NONE,
-        feature: feature);
-  }
-
-  Tile.fromTile(AutoTilerMap_Tile tile) {
-    _tile = tile;
-  }
-
-  String? get baseTerrainName {
-    return _tile.baseTerrain.name.toLowerCase();
-  }
-
-  Stack get image {
-    // Create yield icons for food and production
-    var yields = <Widget>[];
-
-    final tileYields = {
-      "food": _tile.food,
-      "production": _tile.production,
-      "science": _tile.science,
-    };
-
-    tileYields.forEach((name, yield) {
-      for (int i = 0; i < yield; i++) {
-        yields.add(
-          Flexible(
-            child: Image.asset(
-              "icons/$name.jpg",
-            ),
-          ),
-        );
-      }
-    });
-
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Image.asset(
-          "base/$baseTerrainName.jpg",
-          fit: BoxFit.cover,
-        ),
-        if (_tile.improvement != AutoTilerMap_Improvement.NONE)
-          Image.asset(
-            "icons/${_tile.improvement.name.toLowerCase()}.jpg",
-          ),
-        Opacity(
-            opacity: (_tile.owner == -1) ? 0 : 0,
-            child: Container(color: _color)),
-        Column(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            const Row(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: yields,
-            ),
-            SizedBox(
-              height: 40,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (_tile.feature != AutoTilerMap_Feature.EMPTY)
-                    Image.asset(
-                      "features/${_tile.feature.name.toLowerCase()}.jpg",
-                    ),
-                  if (_tile.resource != AutoTilerMap_Resource.CLEAR)
-                    Image.asset(
-                      "resources/${_tile.resource.name.toLowerCase()}.jpg",
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        // Text(_tile.owner.toString()),
-      ],
-    );
-  }
-}
-
 class _MyHomePageState extends State<MyHomePage> {
   CivMap _tiles = {};
   Future<CivMap>? _tilesFuture;
@@ -159,9 +71,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     for (AutoTilerMap_Tile tile in map.tiles) {
       (int, int) coordinate = (tile.col, tile.row);
-      tiles[coordinate] = Tile.fromTile(tile);
-      tiles[coordinate]?._color = Color.fromARGB(255, 50,
-          255 * tile.owner ~/ totalCities, 255 * -tile.owner ~/ totalCities);
+      tiles[coordinate] = Tile(tile: tile);
     }
     return tiles;
   }
@@ -202,7 +112,7 @@ class _MyHomePageState extends State<MyHomePage> {
             feature: feature,
             resource: resource);
 
-        _tiles[coordinate] = Tile.fromTile(tile);
+        _tiles[coordinate] = Tile(tile: tile);
       }
     }
   }
@@ -218,7 +128,7 @@ class _MyHomePageState extends State<MyHomePage> {
       for (int col = 0; col < _columns; col++) {
         (int, int) coordinate = (col, row);
         Tile tile = _tiles[coordinate]!;
-        map.tiles.add(tile._tile);
+        map.tiles.add(tile.tile);
       }
     }
 
@@ -249,7 +159,7 @@ class _MyHomePageState extends State<MyHomePage> {
             buildChild: (col, row) {
               return AspectRatio(
                 aspectRatio: HexagonType.POINTY.ratio,
-                child: snapshot.data?[(col, row)]?.image,
+                child: snapshot.data?[(col, row)],
               );
             },
           );
