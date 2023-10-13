@@ -398,36 +398,18 @@ class AutoTiler:
             # Add the adjacency to the model
             model.Add(campus_adj[i] == base_adjacency[i] + adjacency)
 
+        # Constraint: One campus per owner
+        for i in range(self.num_tiles):
+            for j in range(i + 1, self.num_tiles):
+                if self.map.tiles[i].owner == self.map.tiles[j].owner:
+                    model.Add(campus[i] + campus[j] <= 1)
+
         # Objective: Maximize total science from base adj + other campuses
         total_science = model.NewIntVar(
             0, max(base_adjacency) * self.num_tiles, "total_science"
         )
         model.Add(total_science == sum(campus_adj))
         model.Maximize(total_science)
-
-        # Ownership Variables: Each campus has a unique owner (city)
-        ownership = [
-            model.NewIntVar(0, self.num_tiles, f"ownership_{i}")
-            for i in range(self.num_tiles)
-        ]
-
-        # Distance Constraints: Ensure campuses are within the specified distance of their owners
-        for i in range(self.num_tiles):
-            for j in range(self.num_tiles):
-                distance_to_owner = [
-                    model.NewBoolVar(f"distance_{i}_to_owner_{j}")
-                    for i in range(self.num_tiles)
-                ]
-                for j in range(3):
-                    model.Add(
-                        sum(distance_to_owner[i] for i in range(3)) <= 1
-                    )  # Ensure at most one distance
-                model.Add(ownership[i] == j).OnlyEnforceIf(distance_to_owner[i])
-                model.Add(ownership[i] != j).OnlyEnforceIf(distance_to_owner[i].Not())
-
-        # Each campus has a unique owner
-        for i in range(self.num_tiles):
-            model.Add(sum(ownership[i] == j for j in range(self.num_tiles)) == 1)
 
         # Solve
         solver = cp_model.CpSolver()
@@ -441,15 +423,12 @@ class AutoTiler:
             if solver.Value(campus[i]) == 1:
                 print(f"Campus at {self.map.tiles[i].row}, {self.map.tiles[i].col}")
                 print(f"Adjacency: {solver.Value(campus_adj[i]) / 2}")
-                # self.map.tiles[
-                #     i
-                # ].improvement = autotiler_pb2.AutoTilerMap.Improvement.CAMPUS
+                self.map.tiles[
+                    i
+                ].improvement = autotiler_pb2.AutoTilerMap.Improvement.CAMPUS
 
                 # To send it back we need to divide by 2 then cast to int since our proto requires ints
                 self.map.tiles[i].science = int(solver.Value(campus_adj[i]) / 2)
-
-            # Update ownership
-            self.map.tiles[i].owner = solver.Value(ownership[i])
 
     def maximize_city_regions(self):
         model = cp_model.CpModel()
@@ -500,9 +479,9 @@ class AutoTiler:
                 else:
                     model.Add(helper_bools[i][j] == 0)
 
-        # Add a constraint that each tile must be owned by exactly one city
+        # Ownership Constraints: Each tile must be owned by exactly one city
         for i in valid_tiles:
-            model.Add(sum(helper_bools[i]) <= 1)
+            model.Add(sum(helper_bools[i]) == 1)
 
         solver = cp_model.CpSolver()
         status = solver.Solve(model)
@@ -545,8 +524,8 @@ def home():
 
     optimizer = AutoTiler(map)
     optimizer.optimize_cities(AutoTiler.Strategies.MAX_CITIES)
-    # optimizer.optimize_campuses()
     optimizer.maximize_city_regions()
+    optimizer.optimize_campuses()
 
     # Serialize the map and return it
     print(f"Total time: {time.time() - start_time:.2f}s")

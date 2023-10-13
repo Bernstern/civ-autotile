@@ -99,16 +99,16 @@ class Tile {
     return Stack(
       alignment: Alignment.center,
       children: [
-        // Image.asset(
-        //   "base/$baseTerrainName.jpg",
-        //   fit: BoxFit.cover,
-        // ),
+        Image.asset(
+          "base/$baseTerrainName.jpg",
+          fit: BoxFit.cover,
+        ),
         if (_tile.improvement != AutoTilerMap_Improvement.NONE)
           Image.asset(
             "icons/${_tile.improvement.name.toLowerCase()}.jpg",
           ),
         Opacity(
-            opacity: (_tile.owner == -1) ? 0 : .5,
+            opacity: (_tile.owner == -1) ? 0 : 0,
             child: Container(color: _color)),
         Column(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -136,7 +136,7 @@ class Tile {
             ),
           ],
         ),
-        Text(_tile.owner.toString()),
+        // Text(_tile.owner.toString()),
       ],
     );
   }
@@ -161,7 +161,7 @@ class _MyHomePageState extends State<MyHomePage> {
       (int, int) coordinate = (tile.col, tile.row);
       tiles[coordinate] = Tile.fromTile(tile);
       tiles[coordinate]?._color = Color.fromARGB(255, 50,
-          255 * tile.owner ~/ totalCities, 255 * tile.owner ~/ totalCities);
+          255 * tile.owner ~/ totalCities, 255 * -tile.owner ~/ totalCities);
     }
     return tiles;
   }
