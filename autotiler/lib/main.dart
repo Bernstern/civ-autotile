@@ -54,6 +54,7 @@ class MyHomePage extends StatefulWidget {
 
 class Tile {
   late AutoTilerMap_Tile _tile;
+  late Color _color;
 
   Tile(int col, int row, AutoTilerMap_BaseTerrain terrain,
       AutoTilerMap_Feature feature) {
@@ -98,14 +99,17 @@ class Tile {
     return Stack(
       alignment: Alignment.center,
       children: [
-        Image.asset(
-          "base/$baseTerrainName.jpg",
-          fit: BoxFit.cover,
-        ),
+        // Image.asset(
+        //   "base/$baseTerrainName.jpg",
+        //   fit: BoxFit.cover,
+        // ),
         if (_tile.improvement != AutoTilerMap_Improvement.NONE)
           Image.asset(
             "icons/${_tile.improvement.name.toLowerCase()}.jpg",
           ),
+        Opacity(
+            opacity: (_tile.owner == -1) ? 0 : .5,
+            child: Container(color: _color)),
         Column(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
@@ -132,7 +136,7 @@ class Tile {
             ),
           ],
         ),
-        // Text(_tile.toString()),
+        Text(_tile.owner.toString()),
       ],
     );
   }
@@ -147,9 +151,17 @@ class _MyHomePageState extends State<MyHomePage> {
   CivMap convertToCivMap(AutoTilerMap map) {
     CivMap tiles = {};
 
+    // Get the total number of cities so we can color the tiles
+    int totalCities = 0;
+    for (AutoTilerMap_Tile tile in map.tiles) {
+      totalCities = max(tile.owner, totalCities);
+    }
+
     for (AutoTilerMap_Tile tile in map.tiles) {
       (int, int) coordinate = (tile.col, tile.row);
       tiles[coordinate] = Tile.fromTile(tile);
+      tiles[coordinate]?._color = Color.fromARGB(255, 50,
+          255 * tile.owner ~/ totalCities, 255 * tile.owner ~/ totalCities);
     }
     return tiles;
   }

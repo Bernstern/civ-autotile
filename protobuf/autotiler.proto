@@ -119,6 +119,8 @@ message AutoTilerMap {
         int32 faith = 15;
 
         int32 yieldValue = 20;
+
+        int32 owner = 30;
     }
 
     int32 rows = 1;

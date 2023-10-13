@@ -27,16 +27,9 @@ def getTerrainNameFromNumber(val: int):
     return autotiler_pb2.AutoTilerMap.BaseTerrain.Name(val)
 
 
-def oddr_to_axial(tile):
-    # https://www.redblobgames.com/grids/hexagons/#conversions-offset
-    q = tile.col - (tile.row - (tile.row & 1)) / 2
-    r = tile.row
-    return q, r
-
-
 def oddr_to_cube(tile):
     # https://www.redblobgames.com/grids/hexagons/#conversions-offset
-    x = tile.col - (tile.row - (tile.row & 1)) / 2
+    x = tile.col - (tile.row - (tile.row & 1)) // 2
     z = tile.row
     y = -x - z
     return x, y, z
@@ -64,13 +57,9 @@ def cube_scale(cube_coords, scale):
     return tuple(c * scale for c in cube_coords)
 
 
-def getDistanceBetweenTiles(
-    tile1: autotiler_pb2.AutoTilerMap.Tile, tile2: autotiler_pb2.AutoTilerMap.Tile
-):
-    # https://www.redblobgames.com/grids/hexagons/#distances-axial
-    a = oddr_to_axial(tile1)
-    b = oddr_to_axial(tile2)
-    return (abs(a[0] - b[0]) + abs(a[0] + a[1] - b[0] - b[1]) + abs(a[1] - b[1])) / 2
+def cube_distance(a, b):
+    vec = cube_subtract(oddr_to_cube(a), oddr_to_cube(b))
+    return (abs(vec[0]) + abs(vec[1]) + abs(vec[2])) // 2
 
 
 class YieldsCalculator:
@@ -196,6 +185,16 @@ class AutoTiler:
         self.cube_to_id = {}
         for i in range(self.num_tiles):
             self.cube_to_id[oddr_to_cube(self.map.tiles[i])] = i
+
+        # Go through and calculate the immediate neighbors for each tile
+        self.neighbors = {}
+        for i in range(self.num_tiles):
+            tile_neighbors = self.fetch_ring(self.map.tiles[i], radius=1)
+            self.neighbors[i] = [
+                self.cube_to_id[coord]
+                for coord in tile_neighbors
+                if coord in self.cube_to_id
+            ]
 
     def fetch_ring(self, tile, radius):
         # First get the cube coordinates of the tile
@@ -358,11 +357,11 @@ class AutoTiler:
             neighbors = self.fetch_ring(self.map.tiles[i], radius=1)
             base_adjacency.append(self.calculate_campus_adjacency(neighbors))
 
-        # For our purposes we can take the floor of the adjacency so that the solver can work with ints
-        base_adjacency = [int(adj) for adj in base_adjacency]
+        # For our purposes we have to double this adjacency since the model only likes ints
+        base_adjacency = [int(adj * 2) for adj in base_adjacency]
 
-        # Max tile science is the best base adjacency + 6 surrounding campuses
-        max_tile_science = max(base_adjacency) + 3
+        # Max tile science is the best base adjacency + 6 surrounding campuses (remember, doubled)
+        max_tile_science = max(base_adjacency) + 6
 
         # Variables
         campus = [model.NewBoolVar("campus_%i" % i) for i in range(self.num_tiles)]
@@ -371,7 +370,7 @@ class AutoTiler:
             for i in range(self.num_tiles)
         ]
 
-        # Constraint: No campuses on invalid tiles or on cities
+        # Simple constraint: No campuses on invalid tiles or on cities
         for i in range(self.num_tiles):
             if (
                 self.map.tiles[i].baseTerrain in INVALID_BASE_TERRAIN
@@ -380,18 +379,55 @@ class AutoTiler:
             ):
                 model.Add(campus[i] == 0)
 
-        # Constraint: For now lets say total campus count is one
-        model.Add(sum(campus) == 10)
+        # Calculate adjacny benefits and add to total science
+        for i in range(self.num_tiles):
+            adjacency = 0
+
+            # Get the immediate ring, then their ids
+            neighbors = self.fetch_ring(self.map.tiles[i], radius=1)
+            neighbor_ids = [
+                self.cube_to_id.get(coord, None)
+                for coord in neighbors
+                if self.cube_to_id.get(coord, None) is not None
+            ]
+
+            # Then calculate adjacency as the sum of base + neighbors (pretty much adding 1 for each neighbor that has a campus, again remember, doubled)
+            for neighbor_id in neighbor_ids:
+                adjacency += campus[neighbor_id]
+
+            # Add the adjacency to the model
+            model.Add(campus_adj[i] == base_adjacency[i] + adjacency)
 
         # Objective: Maximize total science from base adj + other campuses
         total_science = model.NewIntVar(
             0, max(base_adjacency) * self.num_tiles, "total_science"
         )
-        for i in range(self.num_tiles):
-            model.Add(campus_adj[i] == campus[i] * base_adjacency[i])
-
         model.Add(total_science == sum(campus_adj))
         model.Maximize(total_science)
+
+        # Ownership Variables: Each campus has a unique owner (city)
+        ownership = [
+            model.NewIntVar(0, self.num_tiles, f"ownership_{i}")
+            for i in range(self.num_tiles)
+        ]
+
+        # Distance Constraints: Ensure campuses are within the specified distance of their owners
+        for i in range(self.num_tiles):
+            for j in range(self.num_tiles):
+                distance_to_owner = [
+                    model.NewBoolVar(f"distance_{i}_to_owner_{j}")
+                    for i in range(self.num_tiles)
+                ]
+                for j in range(3):
+                    model.Add(
+                        sum(distance_to_owner[i] for i in range(3)) <= 1
+                    )  # Ensure at most one distance
+                model.Add(ownership[i] == j).OnlyEnforceIf(distance_to_owner[i])
+                model.Add(ownership[i] != j).OnlyEnforceIf(distance_to_owner[i].Not())
+
+        # Each campus has a unique owner
+        for i in range(self.num_tiles):
+            model.Add(sum(ownership[i] == j for j in range(self.num_tiles)) == 1)
 
         # Solve
         solver = cp_model.CpSolver()
@@ -404,11 +440,93 @@ class AutoTiler:
         for i in range(self.num_tiles):
             if solver.Value(campus[i]) == 1:
                 print(f"Campus at {self.map.tiles[i].row}, {self.map.tiles[i].col}")
-                print(f"Adjacency: {solver.Value(campus_adj[i]) }")
-                self.map.tiles[
-                    i
-                ].improvement = autotiler_pb2.AutoTilerMap.Improvement.CAMPUS
-                self.map.tiles[i].science = solver.Value(campus_adj[i])
+                print(f"Adjacency: {solver.Value(campus_adj[i]) / 2}")
+                # self.map.tiles[
+                #     i
+                # ].improvement = autotiler_pb2.AutoTilerMap.Improvement.CAMPUS
+
+                # To send it back we need to divide by 2 then cast to int since our proto requires ints
+                self.map.tiles[i].science = int(solver.Value(campus_adj[i]) / 2)
+
+            # Update ownership
+            self.map.tiles[i].owner = solver.Value(ownership[i])
+
+    def maximize_city_regions(self):
+        model = cp_model.CpModel()
+        num_tiles = self.num_tiles
+        valid_tiles = range(num_tiles)
+
+        cities = [
+            i
+            for i in valid_tiles
+            if self.map.tiles[i].improvement
+            == autotiler_pb2.AutoTilerMap.Improvement.CITY
+        ]
+        num_cities = len(cities)
+
+        helper_bools = [
+            [model.NewBoolVar(f"helper_{i}_{j}") for j in valid_tiles]
+            for i in valid_tiles  # helper[i][j] = 1 if tile i is owned by city j
+        ]
+
+        # Objective: Maximize average tile count per city
+        tile_count = [
+            model.NewIntVar(0, num_tiles, f"tile_count_city_{i}")
+            for i in range(num_cities)
+        ]
+        print(len(tile_count))
+
+        for city_idx in range(num_cities):
+            city = cities[city_idx]
+            bools = [helper_bools[j][city] for j in valid_tiles]
+            model.Add(tile_count[city_idx] == sum(bools))
+
+        min_tile_count = model.NewIntVar(0, num_tiles, "min_tile_count")
+        model.AddMinEquality(min_tile_count, tile_count)
+        model.Maximize(min_tile_count)
+
+        # Identity + Range constraint: Tiles must be within 3 tiles of their owner and cities own themselves
+        for i in valid_tiles:
+            for j in cities:
+                if i == j:
+                    model.Add(helper_bools[i][j] == 1)
+                else:
+                    distance = cube_distance(self.map.tiles[i], self.map.tiles[j])
+                    if distance > 3:
+                        model.Add(helper_bools[i][j] == 0)
+                    else:
+                        model.Add(helper_bools[i][j] <= 1)
+
+        # Constraint: Each tile only has one owner
+        for i in valid_tiles:
+            model.Add(sum(helper_bools[i]) <= 1)
+
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+
+        if status != cp_model.OPTIMAL:
+            raise Exception("No optimal solution found.")
+
+        print(
+            f"Optimal solution found with {num_cities} cities and min tile count of {solver.Value(min_tile_count)}"
+        )
+
+        total = 0
+        for city in range(num_cities):
+            print(f"City {cities[city]} owns {solver.Value(tile_count[city])} tiles")
+            total += solver.Value(tile_count[city])
+        print(f"Total tiles: {total}")
+
+        # Update ownership of each tile
+        for i in valid_tiles:
+            # Find the owner of this tile, will be the index of the bool which is true
+            vals = []
+            for j in valid_tiles:
+                vals.append(solver.Value(helper_bools[i][j]))
+            if 1 not in vals:
+                self.map.tiles[i].owner = -1
+                continue
+            self.map.tiles[i].owner = solver.Value(vals.index(1))
 
 
 @app.route("/", methods=["POST"])
@@ -424,7 +542,8 @@ def home():
 
     optimizer = AutoTiler(map)
     optimizer.optimize_cities(AutoTiler.Strategies.MAX_CITIES)
-    optimizer.optimize_campuses()
+    # optimizer.optimize_campuses()
+    optimizer.maximize_city_regions()
 
     # Serialize the map and return it
     print(f"Total time: {time.time() - start_time:.2f}s")
