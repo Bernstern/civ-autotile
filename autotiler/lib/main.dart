@@ -9,7 +9,7 @@ import 'package:autotiler/gen/protobuf/autotiler.pb.dart';
 
 import 'tile.dart';
 
-typedef CivMap = Map<Record, Tile>;
+typedef CivMap = Map<Record, TileWidget>;
 
 void main() {
   runApp(const MyApp());
@@ -59,6 +59,14 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<CivMap>? _tilesFuture;
   final int _rows = 12;
   final int _columns = 12;
+  int hoveredCity = -2;
+
+  void setHoveredCity(int city) {
+    print("Hovered city $city");
+    // setState(() {
+    //   hoveredCity = city;
+    // });
+  }
 
   CivMap convertToCivMap(AutoTilerMap map) {
     CivMap tiles = {};
@@ -71,7 +79,11 @@ class _MyHomePageState extends State<MyHomePage> {
 
     for (AutoTilerMap_Tile tile in map.tiles) {
       (int, int) coordinate = (tile.col, tile.row);
-      tiles[coordinate] = Tile(tile: tile);
+      tiles[coordinate] = TileWidget(
+        tile: tile,
+        setHoveredCity: setHoveredCity,
+        hoveredCity: hoveredCity,
+      );
     }
     return tiles;
   }
@@ -112,7 +124,11 @@ class _MyHomePageState extends State<MyHomePage> {
             feature: feature,
             resource: resource);
 
-        _tiles[coordinate] = Tile(tile: tile);
+        _tiles[coordinate] = TileWidget(
+          tile: tile,
+          setHoveredCity: setHoveredCity,
+          hoveredCity: hoveredCity,
+        );
       }
     }
   }
@@ -127,7 +143,7 @@ class _MyHomePageState extends State<MyHomePage> {
     for (int row = 0; row < _rows; row++) {
       for (int col = 0; col < _columns; col++) {
         (int, int) coordinate = (col, row);
-        Tile tile = _tiles[coordinate]!;
+        TileWidget tile = _tiles[coordinate]!;
         map.tiles.add(tile.tile);
       }
     }
@@ -135,7 +151,7 @@ class _MyHomePageState extends State<MyHomePage> {
     return (map.writeToBuffer());
   }
 
-  Future<Map<Record, Tile>> sendToBackend() async {
+  Future<Map<Record, TileWidget>> sendToBackend() async {
     generateTiles();
     Uint8List mapPayload = serializeToProto();
     var response = await queryBackend(mapPayload);
