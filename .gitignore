@@ -161,4 +161,4 @@ cython_debug/
 
 # Protobuf
 *pb2.py
-autotiler/lib/gen
+autotiler/lib/gen/
